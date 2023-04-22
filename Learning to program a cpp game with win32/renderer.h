@@ -1,12 +1,20 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
-#include <string>
-#include <filesystem>
+struct LoadedSprite {
+	BITMAP bm;
+	HDC memDC;
+	HBITMAP memBmp;
+};
 
-static void
-clearScreen(u32 color) {
+void clearScreen(u32 color);
+void drawRect(float x1, float y1, float x2, float y2, u32 color, Scaling scaling, Anchor anchorPoint);
+void loadTransparency(HDC hdc, LoadedSprite sprite);
+LoadedSprite loadSprite(HDC hdc, const char* fileLoc);
+void unloadSprite(LoadedSprite sprite);
+
+#include "asset_loader.h"
+
+void clearScreen(u32 color) {
 	u32* pixel = (u32*)renderBuffer.memory;
 	for (int y = 0; y < renderBuffer.height; y++) {
 		for (int x = 0; x < renderBuffer.width; x++) {
@@ -15,8 +23,7 @@ clearScreen(u32 color) {
 	}
 }
 
-static void
-drawRect(float x1, float y1, float x2, float y2, u32 color, Scaling scaling, Anchor anchorPoint) {
+void drawRect(float x1, float y1, float x2, float y2, u32 color, Scaling scaling, Anchor anchorPoint) {
 
 	switch (scaling)
 	{
@@ -128,14 +135,22 @@ drawRect(float x1, float y1, float x2, float y2, u32 color, Scaling scaling, Anc
 	}
 }
 
-struct LoadedSprite {
-	BITMAP bm;
-	HDC memDC;
-	HBITMAP memBmp;
-};
+LoadedSprite loadTransparency(HDC hdc, std::string spriteName) {
+	LoadedSprite sprite = resources.at(spriteName);
+	COLORREF spriteBg = GetPixel(sprite.memDC, 0, 0);
 
-static LoadedSprite
-loadSprite(HDC hdc, const char* fileLoc, bool transparentBg) {
+	for (int x = 0; x < sprite.bm.bmWidth; x++) {
+		for (int y = 0; y < sprite.bm.bmHeight; y++) {
+			COLORREF bgPixel = GetPixel(hdc, x, y);
+			if (GetPixel(sprite.memDC, x, y) == spriteBg) {
+				SetPixel(sprite.memDC, x, y, bgPixel);
+			}
+		}
+	}
+	return sprite;
+}
+
+LoadedSprite loadSprite(HDC hdc, const char* fileLoc) {
 	HANDLE hSprite = LoadImage(NULL, fileLoc, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE | LR_LOADTRANSPARENT);
 	if (hSprite == NULL) {
 		MessageBox(NULL, "Could not load image.\n" + GetLastError(), "Error", MB_OK);
@@ -150,24 +165,14 @@ loadSprite(HDC hdc, const char* fileLoc, bool transparentBg) {
 	sprite.memDC = CreateCompatibleDC(hdc); //Make room in memory for the sprite 
 	sprite.memBmp = (HBITMAP)SelectObject(sprite.memDC, hSprite); //Select the loaded image and put it into the reserved memory
 
-	loadTransparency(hdc, sprite);
-
 	return sprite;
 }
 
-static void
-loadTransparency(HDC hdc, LoadedSprite sprite) {
-	// Get the color of each pixel behind where the image will be displayed and the color to make the background transparent
-	for (int x; x < sprite.bm.bmWidth; x++) {
-		for (int y; y < sprite.bm.bmHeight; y++) {
-			COLORREF bgColor = GetPixel(hdc, 0, 0);
-			SetBkColor(sprite.memDC, bgColor);
-		}
-	}
-}
 
-static void
-unloadSprite(auto memDC, auto memBmp) {
+
+void unloadSprite(LoadedSprite sprite) {
+	auto memDC = sprite.memDC;
+	auto memBmp = sprite.memBmp;
 	SelectObject(memDC, memBmp); //select memDC
 	DeleteDC(memDC); //delete it, we are done with it so we free up some memory and avoid a leak
 }

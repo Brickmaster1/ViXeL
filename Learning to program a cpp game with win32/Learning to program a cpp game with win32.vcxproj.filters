@@ -18,18 +18,12 @@
     <ClCompile Include="vixel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="main_game.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="game_settings.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="assets.h">
+    <ClInclude Include="asset_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="renderer.h">

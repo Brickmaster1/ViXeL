@@ -1,10 +1,15 @@
-#include <utility>
-#include "util.h"
 #include <windows.h>
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <map>
+#include <filesystem>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <chrono>
 
-void paintWindow(HWND hWnd);
-
-static bool running = true;
+static std::atomic<bool> running = true;
 
 struct RenderBuffer {
 	void* memory;
@@ -26,11 +31,12 @@ struct GlobalProperties {
 static RenderBuffer renderBuffer;
 static GlobalProperties globalProperties;
 
-#include "platform_common.cpp"
-#include "main_game.cpp"
+#include "util.h"
 #include "renderer.h"
-#include "assets.h"
+#include "asset_loader.h"
 
+void paintWindow(HWND hWnd);
+void messageLoop(HWND hWnd);
 
 LRESULT CALLBACK mainCallbackFunc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	LRESULT result = 0;
@@ -38,6 +44,7 @@ LRESULT CALLBACK mainCallbackFunc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
 	case WM_CLOSE:
 	case WM_DESTROY: {
 		running = false;
+		PostQuitMessage(0);
 	} break;
 
 	case WM_SIZE: {
@@ -61,7 +68,6 @@ LRESULT CALLBACK mainCallbackFunc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
 	} break;
 
 	case WM_PAINT: {
-		clearScreen(0x886622);
 		paintWindow(hWnd);
 	}
 
@@ -69,6 +75,17 @@ LRESULT CALLBACK mainCallbackFunc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
 		result = DefWindowProc(hWnd, uMsg, wParam, lParam);
 	}
 	return result;
+}
+
+void messageLoop(HWND hWnd) {
+	MSG message;
+	while (running) {
+		while (GetMessage(&message, hWnd, 0, 0)) {
+			TranslateMessage(&message);
+			DispatchMessage(&message);
+		}
+
+	}
 }
 
 int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd) {
@@ -87,53 +104,24 @@ int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int n
 	
 	initResources(hdc);
 
-	Input input = {};
+	std::thread messageThread(messageLoop,mainWindow);
+	std::chrono::duration<int, std::ratio<1, 1000>> fps;
 
 	while (running) {
-		//Input
-		MSG message;
 
-		for (int i = 0; i < BUTTON_COUNT; i++) {
-			input.buttons[i].changed = false;
-		}
-
-		while (PeekMessage(&message, mainWindow, 0, 0, PM_REMOVE)) {
-
-			switch (message.message) {
-				case WM_KEYUP:
-				case WM_KEYDOWN: {
-					u32 vkCode = (u32)message.wParam;
-					bool isDown = ((message.lParam & (1 << 31)) == 0);
-					switch (vkCode)
-					{
-						case VK_UP: {
-							input.buttons[BUTTON_UP].isDown = isDown;
-							input.buttons[BUTTON_UP].changed = true;
-						} break;
-						
-						case VK_DOWN: {
-
-						} break;
-
-						default:
-							break;
-					}
-				} break;
-
-				default: {
-					TranslateMessage(&message);
-					DispatchMessage(&message);
-				}
-			}
-		}
+		
 	}
+
+	messageThread.join();
 }
 
 void paintWindow(HWND hWnd) {
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
+	clearScreen(0x886622);
 	StretchDIBits(hdc, 0, 0, renderBuffer.width, renderBuffer.height, 0, 0, renderBuffer.width, renderBuffer.height, renderBuffer.memory, &renderBuffer.bitmapInfo, DIB_RGB_COLORS, SRCCOPY);
 	LoadedSprite spriteVixel = resources.at("vixel.bmp");
+	spriteVixel = loadTransparency(hdc, "vixel.bmp");
 	StretchBlt(hdc, renderBuffer.width / 2 - spriteVixel.bm.bmWidth * 6 / 2, renderBuffer.height / 2 - spriteVixel.bm.bmHeight * 6 / 2, spriteVixel.bm.bmWidth * 6, spriteVixel.bm.bmHeight * 6, spriteVixel.memDC, 0, 0, spriteVixel.bm.bmWidth, spriteVixel.bm.bmHeight, SRCCOPY);
 	EndPaint(hWnd, &ps);
 }
